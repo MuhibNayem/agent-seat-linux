@@ -22,7 +22,7 @@ uuid = { version = "1", features = ["v4"] }
 wayland-backend = "0.3"
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging", "unstable"] }
-xkbcommon = "0.8"
+xkbcommon = "0.9"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
