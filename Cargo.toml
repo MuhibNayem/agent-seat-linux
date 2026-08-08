@@ -1,0 +1,34 @@
+[package]
+name = "agent-seat-linux"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "App-scoped Wayland capture and input for Linux automation agents"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/MuhibNayem/agent-seat-linux"
+homepage = "https://github.com/MuhibNayem/agent-seat-linux"
+documentation = "https://docs.rs/agent-seat-linux"
+readme = "README.md"
+keywords = ["wayland", "automation", "computer-use", "xwayland", "linux"]
+categories = ["os::linux-apis", "gui"]
+authors = ["A K M Muhibullah Nayem <muhibullah.nayem@bracits.com>"]
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+libc = "0.2"
+polling = "3"
+smallvec = "1"
+uuid = { version = "1", features = ["v4"] }
+wayland-backend = "0.3"
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging", "unstable"] }
+xkbcommon = "0.8"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
