@@ -2,6 +2,15 @@
 
 All notable changes will be documented in this file.
 
+## 1.0.0 - 2026-08-09
+
+### Changed
+- Publishing now uses crates.io **Trusted Publishing** (OIDC) instead of a long-lived
+  API token secret; the release workflow exchanges a short-lived token via
+  `rust-lang/crates-io-auth-action`.
+- First stable release: the typed `SeatError` API and high-level `ComputerUse`
+  harness are now considered stable.
+
 ## 0.2.0 - 2026-08-09
 
 ### Added
