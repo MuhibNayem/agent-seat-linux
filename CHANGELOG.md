@@ -2,7 +2,7 @@
 
 All notable changes will be documented in this file.
 
-## [Unreleased]
+## 0.2.0 - 2026-08-09
 
 ### Added
 - `COMPATIBILITY.md`: compositor/toolkit support tiers and validation guide.
