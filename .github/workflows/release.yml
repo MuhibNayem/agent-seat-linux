@@ -36,6 +36,6 @@ jobs:
       - name: Install stable toolchain
         run: rustup toolchain install stable --profile minimal --no-self-update
       - name: Publish to crates.io
-        run: cargo publish --no-confirm
+        run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
