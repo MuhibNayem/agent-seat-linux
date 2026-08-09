@@ -87,10 +87,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Run the included example:
+Run the included examples:
 
 ```bash
-cargo run --example basic -- gnome-calculator
+cargo run --example basic -- gnome-calculator      # launch, capture, click, type
+cargo run --example agent_loop -- gnome-calculator # perceive -> act -> perceive loop
 ```
 
 The app's `Transport` reports whether native Wayland or XWayland was selected.
@@ -107,6 +108,13 @@ The crate's high-level boundary is deliberately small:
 
 Python, Node, JVM, Go, and C harnesses can wrap this API through their usual
 Rust FFI layer without inheriting any Chorus-specific data model.
+
+## Documentation
+
+- [COMPATIBILITY.md](COMPATIBILITY.md) — validated/expected compositor & toolkit matrix, and how to add a target.
+- [docs/FFI.md](docs/FFI.md) — wrapping the crate from C/Python/Node/Go/JVM via a thin C-ABI shim.
+- [RELEASE.md](RELEASE.md) — crates.io release checklist and automated publish workflow.
+- [SECURITY.md](SECURITY.md) — security policy and reporting.
 
 ## Low-level API
 

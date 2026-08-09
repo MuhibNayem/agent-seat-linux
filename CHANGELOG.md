@@ -2,6 +2,19 @@
 
 All notable changes will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- `COMPATIBILITY.md`: compositor/toolkit support tiers and validation guide.
+- `docs/FFI.md`: cross-language (C/Python/Node/Go/JVM) integration guide with a C-ABI shim sketch.
+- `RELEASE.md` + `.github/workflows/release.yml`: crates.io release checklist and tag-driven publish workflow.
+- `examples/agent_loop.rs`: perceive -> act -> perceive demonstration loop.
+
+### Changed
+- Low-level API now returns a typed `thiserror`-based `SeatError` instead of `String`,
+  with the high-level `Error` wrapping it and exposing `source()`.
+- Complete `///` documentation across the public low-level API (`missing_docs` clean).
+
 ## 0.1.0 - 2026-08-08
 
 - Initial standalone extraction from Chorus.

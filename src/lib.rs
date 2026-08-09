@@ -14,11 +14,13 @@
 #[cfg(not(target_os = "linux"))]
 compile_error!("agent-seat-linux supports Linux only");
 
+mod error;
 mod harness;
 mod keymap;
 mod process;
 mod seat;
 
+pub use error::SeatError;
 pub use harness::{
     ComputerUse, ComputerUseBuilder, ControlledApp, Error, LaunchConfig, PointerButton, Result,
     Transport,

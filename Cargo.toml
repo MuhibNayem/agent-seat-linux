@@ -14,6 +14,7 @@ categories = ["os::linux-apis", "gui"]
 authors = ["A K M Muhibullah Nayem <muhibullah.nayem@bracits.com>"]
 
 [dependencies]
+thiserror = "2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 libc = "0.2"
 polling = "3"

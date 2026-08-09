@@ -26,6 +26,8 @@ pub use capture::CapturedFrame;
 
 use proxy::{Conn, ServerState};
 
+use crate::SeatError;
+
 /// Commands queued from tool threads, executed by the proxy loop.
 #[allow(dead_code)]
 pub(crate) enum Action {
@@ -134,9 +136,9 @@ impl SeatApp {
 
     /// Read the app's current rendered frame (window-scoped capture).
     #[allow(dead_code)]
-    pub fn capture_frame(&self) -> Result<CapturedFrame, String> {
+    pub fn capture_frame(&self) -> Result<CapturedFrame, SeatError> {
         let conn = self.conn.lock().unwrap();
-        capture::capture_frame(&conn)
+        capture::capture_frame(&conn).map_err(SeatError::Capture)
     }
 
     /// True once the client has produced a window-sized frame rather than a
@@ -160,10 +162,10 @@ impl SeatApp {
 
     /// Click at surface-local (x, y). `button` is a Linux input code.
     #[allow(dead_code)]
-    pub fn inject_click(&self, x: f64, y: f64, button: u32, count: u32) -> Result<(), String> {
+    pub fn inject_click(&self, x: f64, y: f64, button: u32, count: u32) -> Result<(), SeatError> {
         {
             let mut conn = self.conn.lock().unwrap();
-            input::inject_click(&mut conn, x, y, button, count)?;
+            input::inject_click(&mut conn, x, y, button, count).map_err(SeatError::Input)?;
         }
         let _ = self.poller.notify();
         Ok(())
@@ -177,10 +179,11 @@ impl SeatApp {
         button: u32,
         count: u32,
         modifiers: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<(), SeatError> {
         {
             let mut conn = self.conn.lock().unwrap();
-            input::inject_click_with_modifiers(&mut conn, x, y, button, count, modifiers)?;
+            input::inject_click_with_modifiers(&mut conn, x, y, button, count, modifiers)
+                .map_err(SeatError::Input)?;
         }
         let _ = self.poller.notify();
         Ok(())
@@ -188,10 +191,10 @@ impl SeatApp {
 
     /// Scroll at surface-local (x, y) by discrete notches.
     #[allow(dead_code)]
-    pub fn inject_scroll(&self, x: f64, y: f64, dx: i32, dy: i32) -> Result<(), String> {
+    pub fn inject_scroll(&self, x: f64, y: f64, dx: i32, dy: i32) -> Result<(), SeatError> {
         {
             let mut conn = self.conn.lock().unwrap();
-            input::inject_scroll(&mut conn, x, y, dx, dy)?;
+            input::inject_scroll(&mut conn, x, y, dx, dy).map_err(SeatError::Input)?;
         }
         let _ = self.poller.notify();
         Ok(())
@@ -199,20 +202,20 @@ impl SeatApp {
 
     /// Press/release a raw keycode.
     #[allow(dead_code)]
-    pub fn inject_key_raw(&self, keycode: u32, pressed: bool) -> Result<(), String> {
+    pub fn inject_key_raw(&self, keycode: u32, pressed: bool) -> Result<(), SeatError> {
         {
             let mut conn = self.conn.lock().unwrap();
-            input::inject_key_raw(&mut conn, keycode, pressed)?;
+            input::inject_key_raw(&mut conn, keycode, pressed).map_err(SeatError::Input)?;
         }
         let _ = self.poller.notify();
         Ok(())
     }
 
     /// Press a key or `+`-separated key combination in this app.
-    pub fn inject_key_combo(&self, combination: &str) -> Result<(), String> {
+    pub fn inject_key_combo(&self, combination: &str) -> Result<(), SeatError> {
         {
             let mut conn = self.conn.lock().unwrap();
-            input::inject_key_combo(&mut conn, combination)?;
+            input::inject_key_combo(&mut conn, combination).map_err(SeatError::Input)?;
         }
         let _ = self.poller.notify();
         Ok(())
@@ -225,10 +228,10 @@ impl SeatApp {
         from_y: f64,
         to_x: f64,
         to_y: f64,
-    ) -> Result<(), String> {
+    ) -> Result<(), SeatError> {
         {
             let mut conn = self.conn.lock().unwrap();
-            input::inject_drag(&mut conn, from_x, from_y, to_x, to_y)?;
+            input::inject_drag(&mut conn, from_x, from_y, to_x, to_y).map_err(SeatError::Input)?;
         }
         let _ = self.poller.notify();
         Ok(())
@@ -236,10 +239,10 @@ impl SeatApp {
 
     /// Type a string into the app (resolves characters via the app's keymap).
     #[allow(dead_code)]
-    pub fn inject_text(&self, text: &str) -> Result<(), String> {
+    pub fn inject_text(&self, text: &str) -> Result<(), SeatError> {
         {
             let mut conn = self.conn.lock().unwrap();
-            input::inject_text(&mut conn, text)?;
+            input::inject_text(&mut conn, text).map_err(SeatError::Input)?;
         }
         let _ = self.poller.notify();
         Ok(())
@@ -295,7 +298,7 @@ fn seat_slot() -> &'static Mutex<Option<Arc<AgentSeat>>> {
 
 /// The process-wide agent seat, created on first use. Fails when there is no
 /// Wayland session to proxy into.
-pub fn seat() -> Result<Arc<AgentSeat>, String> {
+pub fn seat() -> Result<Arc<AgentSeat>, SeatError> {
     let mut slot = seat_slot().lock().unwrap();
     if let Some(existing) = slot.as_ref() {
         return Ok(existing.clone());
@@ -356,31 +359,28 @@ fn set_owner_only_socket_permissions(path: &std::path::Path) -> std::io::Result<
 
 impl AgentSeat {
     /// Create and start an independently owned agent seat.
-    pub fn create() -> Result<Arc<Self>, String> {
+    pub fn create() -> Result<Arc<Self>, SeatError> {
         let seat = Arc::new(Self::new_unstarted()?);
         seat.start()?;
         Ok(seat)
     }
 
-    fn new_unstarted() -> Result<Self, String> {
+    fn new_unstarted() -> Result<Self, SeatError> {
         let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
             .ok()
             .filter(|v| !v.is_empty())
-            .ok_or("XDG_RUNTIME_DIR is not set; no Wayland session")?;
+            .ok_or(SeatError::MissingRuntimeDir)?;
         let upstream_display = std::env::var("WAYLAND_DISPLAY")
             .ok()
             .filter(|v| !v.is_empty())
-            .ok_or("WAYLAND_DISPLAY is not set; no Wayland session")?;
+            .ok_or(SeatError::NoWaylandSession)?;
         let upstream_socket = if upstream_display.starts_with('/') {
             PathBuf::from(&upstream_display)
         } else {
             PathBuf::from(&runtime_dir).join(&upstream_display)
         };
         if !upstream_socket.exists() {
-            return Err(format!(
-                "the Wayland compositor socket {} does not exist",
-                upstream_socket.display()
-            ));
+            return Err(SeatError::NoWaylandSession);
         }
 
         // Remove seat sockets left behind by hosts that have since
@@ -395,17 +395,20 @@ impl AgentSeat {
         );
         let socket_path = PathBuf::from(&runtime_dir).join(&socket_name);
         let _ = std::fs::remove_file(&socket_path);
-        let listener = UnixListener::bind(&socket_path)
-            .map_err(|e| format!("could not bind the agent seat socket: {e}"))?;
+        let listener = UnixListener::bind(&socket_path).map_err(|e| {
+            SeatError::SocketCreate(format!("could not bind the agent seat socket: {e}"))
+        })?;
         if let Err(e) = set_owner_only_socket_permissions(&socket_path) {
             let _ = std::fs::remove_file(&socket_path);
-            return Err(format!(
+            return Err(SeatError::SocketCreate(format!(
                 "could not restrict the agent seat socket permissions: {e}"
-            ));
+            )));
         }
         if let Err(e) = listener.set_nonblocking(true) {
             let _ = std::fs::remove_file(&socket_path);
-            return Err(format!("could not make the seat socket nonblocking: {e}"));
+            return Err(SeatError::SocketCreate(format!(
+                "could not make the seat socket nonblocking: {e}"
+            )));
         }
 
         Ok(Self {
@@ -423,7 +426,7 @@ impl AgentSeat {
         })
     }
 
-    fn start(self: &Arc<Self>) -> Result<(), String> {
+    fn start(self: &Arc<Self>) -> Result<(), SeatError> {
         let accept_seat = Arc::downgrade(self);
         let handle = std::thread::Builder::new()
             .name("agent-seat-accept".into())
@@ -435,7 +438,9 @@ impl AgentSeat {
                     seat.accept_once();
                 }
             })
-            .map_err(|e| format!("could not start the seat accept loop: {e}"))?;
+            .map_err(|e| {
+                SeatError::Process(format!("could not start the seat accept loop: {e}"))
+            })?;
         *self.accept_thread.lock().unwrap() = Some(handle);
         Ok(())
     }
@@ -460,33 +465,44 @@ impl AgentSeat {
     /// is itself a client of this seat. `-shm` makes its pixels readable by the
     /// window-scoped capture path, while the Xauthority cookie prevents other
     /// local users from connecting to the temporary X socket.
-    pub fn start_xwayland_bridge(&self, width: u16, height: u16) -> Result<XwaylandBridge, String> {
+    pub fn start_xwayland_bridge(
+        &self,
+        width: u16,
+        height: u16,
+    ) -> Result<XwaylandBridge, SeatError> {
         if width < 160 || height < 120 {
-            return Err("XWayland bridge geometry must be at least 160x120".to_string());
+            return Err(SeatError::Xwayland(
+                "bridge geometry must be at least 160x120".to_string(),
+            ));
         }
-        let xwayland = crate::process::find_executable("Xwayland")
-            .ok_or_else(|| "XWayland is not installed for compatibility fallback".to_string())?;
+        let xwayland = crate::process::find_executable("Xwayland").ok_or_else(|| {
+            SeatError::Xwayland("XWayland is not installed for compatibility fallback".to_string())
+        })?;
         let display_num = crate::process::pick_free_display(std::path::Path::new("/tmp/.X11-unix"))
-            .ok_or_else(|| "no free X display number for the compatibility bridge".to_string())?;
+            .ok_or_else(|| {
+                SeatError::Xwayland(
+                    "no free X display number for the compatibility bridge".to_string(),
+                )
+            })?;
         let display = format!(":{display_num}");
-        let runtime_base = self
-            .socket_path
-            .parent()
-            .ok_or_else(|| "agent seat socket has no runtime directory".to_string())?;
+        let runtime_base = self.socket_path.parent().ok_or_else(|| {
+            SeatError::Custom("agent seat socket has no runtime directory".to_string())
+        })?;
         let runtime_dir = runtime_base.join(format!(
             "agent-seat-xwayland-{}-{}",
             std::process::id(),
             uuid::Uuid::new_v4()
         ));
-        std::fs::create_dir(&runtime_dir)
-            .map_err(|e| format!("could not create XWayland runtime directory: {e}"))?;
+        std::fs::create_dir(&runtime_dir).map_err(|e| {
+            SeatError::Xwayland(format!("could not create XWayland runtime directory: {e}"))
+        })?;
         if let Err(error) =
             std::fs::set_permissions(&runtime_dir, std::fs::Permissions::from_mode(0o700))
         {
             let _ = std::fs::remove_dir(&runtime_dir);
-            return Err(format!(
+            return Err(SeatError::Xwayland(format!(
                 "could not restrict XWayland runtime directory: {error}"
-            ));
+            )));
         }
 
         let xauthority = runtime_dir.join("Xauthority");
@@ -507,22 +523,24 @@ impl AgentSeat {
             Ok(status) => status,
             Err(error) => {
                 let _ = std::fs::remove_dir_all(&runtime_dir);
-                return Err(format!("could not create XWayland authority file: {error}"));
+                return Err(SeatError::Xauth(format!(
+                    "could not create XWayland authority file: {error}"
+                )));
             }
         };
         if !auth_status.success() {
             let _ = std::fs::remove_dir_all(&runtime_dir);
-            return Err(format!(
+            return Err(SeatError::Xauth(format!(
                 "xauth could not create credentials for display {display}"
-            ));
+            )));
         }
         if let Err(error) =
             std::fs::set_permissions(&xauthority, std::fs::Permissions::from_mode(0o600))
         {
             let _ = std::fs::remove_dir_all(&runtime_dir);
-            return Err(format!(
+            return Err(SeatError::Xauth(format!(
                 "could not restrict XWayland authority file: {error}"
-            ));
+            )));
         }
 
         let mut command = Command::new(xwayland);
@@ -554,9 +572,9 @@ impl AgentSeat {
             Ok(child) => child,
             Err(error) => {
                 let _ = std::fs::remove_dir_all(&runtime_dir);
-                return Err(format!(
+                return Err(SeatError::Xwayland(format!(
                     "could not start XWayland compatibility bridge: {error}"
-                ));
+                )));
             }
         };
         let socket = PathBuf::from(format!("/tmp/.X11-unix/X{display_num}"));
@@ -572,24 +590,27 @@ impl AgentSeat {
             }
             if child.try_wait().ok().flatten().is_some() {
                 let _ = std::fs::remove_dir_all(&runtime_dir);
-                return Err("XWayland compatibility bridge exited during startup".to_string());
+                return Err(SeatError::Xwayland(
+                    "XWayland compatibility bridge exited during startup".to_string(),
+                ));
             }
             std::thread::sleep(Duration::from_millis(50));
         }
         let _ = child.kill();
         let _ = child.wait();
         let _ = std::fs::remove_dir_all(&runtime_dir);
-        Err("XWayland compatibility bridge did not create its X socket".to_string())
+        Err(SeatError::Xwayland(
+            "XWayland compatibility bridge did not create its X socket".to_string(),
+        ))
     }
 
     /// Transfer a successful bridge to the seat. Closing the seat connection
     /// makes XWayland exit; the owned reaper then removes only this bridge's
     /// credential directory.
-    pub fn adopt_xwayland_bridge(&self, mut bridge: XwaylandBridge) -> Result<(), String> {
-        let child = bridge
-            .child
-            .take()
-            .ok_or_else(|| "XWayland bridge process was already transferred".to_string())?;
+    pub fn adopt_xwayland_bridge(&self, mut bridge: XwaylandBridge) -> Result<(), SeatError> {
+        let child = bridge.child.take().ok_or_else(|| {
+            SeatError::Xwayland("XWayland bridge process was already transferred".to_string())
+        })?;
         let runtime_dir = bridge.runtime_dir.clone();
         let shared = Arc::new(Mutex::new(Some(child)));
         let reaper_child = shared.clone();
@@ -607,7 +628,9 @@ impl AgentSeat {
                     let _ = child.kill();
                     let _ = child.wait();
                 }
-                return Err(format!("could not start XWayland reaper: {error}"));
+                return Err(SeatError::Xwayland(format!(
+                    "could not start XWayland reaper: {error}"
+                )));
             }
         };
         // The reaper now owns cleanup. Keep the path on `bridge` until thread
@@ -892,7 +915,7 @@ struct PeerCredentials {
 }
 
 /// Kernel-authenticated peer credentials of a connecting app.
-fn peer_credentials(stream: &std::os::unix::net::UnixStream) -> Result<PeerCredentials, String> {
+fn peer_credentials(stream: &std::os::unix::net::UnixStream) -> Result<PeerCredentials, SeatError> {
     use std::os::fd::AsFd;
     // SAFETY: libc::ucred is a plain C output structure and all-zero is a
     // valid initialization before getsockopt overwrites it.
@@ -910,13 +933,15 @@ fn peer_credentials(stream: &std::os::unix::net::UnixStream) -> Result<PeerCrede
         )
     };
     if ret != 0 {
-        return Err(format!(
+        return Err(SeatError::PeerCredential(format!(
             "could not read SO_PEERCRED: {}",
             std::io::Error::last_os_error()
-        ));
+        )));
     }
     if len as usize != std::mem::size_of::<libc::ucred>() || ucred.pid <= 0 {
-        return Err("SO_PEERCRED returned invalid credentials".into());
+        return Err(SeatError::PeerCredential(
+            "SO_PEERCRED returned invalid credentials".to_string(),
+        ));
     }
     Ok(PeerCredentials {
         pid: ucred.pid as u32,
@@ -924,17 +949,20 @@ fn peer_credentials(stream: &std::os::unix::net::UnixStream) -> Result<PeerCrede
     })
 }
 
-fn validate_peer(credentials: PeerCredentials, expected_uid: libc::uid_t) -> Result<u32, String> {
+fn validate_peer(
+    credentials: PeerCredentials,
+    expected_uid: libc::uid_t,
+) -> Result<u32, SeatError> {
     if credentials.uid != expected_uid {
-        return Err(format!(
+        return Err(SeatError::PeerCredential(format!(
             "peer uid {} does not match agent-seat owner uid {expected_uid}",
             credentials.uid
-        ));
+        )));
     }
     Ok(credentials.pid)
 }
 
-fn trusted_peer_pid(stream: &std::os::unix::net::UnixStream) -> Result<u32, String> {
+fn trusted_peer_pid(stream: &std::os::unix::net::UnixStream) -> Result<u32, SeatError> {
     let credentials = peer_credentials(stream)?;
     validate_peer(credentials, effective_uid())
 }

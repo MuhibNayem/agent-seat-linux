@@ -5,18 +5,23 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::{AgentSeat, CapturedFrame, SeatApp};
+use crate::{AgentSeat, CapturedFrame, SeatApp, SeatError};
 
 /// Error returned by the high-level computer-use API.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Wraps the low-level [`SeatError`] when one occurs; the wrapped error is
+/// exposed through [`std::error::Error::source`].
+#[derive(Debug)]
 pub struct Error {
     message: String,
+    source: Option<SeatError>,
 }
 
 impl Error {
     fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            source: None,
         }
     }
 }
@@ -27,7 +32,22 @@ impl fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source
+            .as_ref()
+            .map(|error| error as &(dyn std::error::Error + 'static))
+    }
+}
+
+impl From<SeatError> for Error {
+    fn from(error: SeatError) -> Self {
+        Self {
+            message: error.to_string(),
+            source: Some(error),
+        }
+    }
+}
 
 impl From<String> for Error {
     fn from(message: String) -> Self {
@@ -37,7 +57,7 @@ impl From<String> for Error {
 
 impl From<std::io::Error> for Error {
     fn from(error: std::io::Error) -> Self {
-        Self::new(error.to_string())
+        Self::from(SeatError::from(error))
     }
 }
 
@@ -466,10 +486,10 @@ fn configure_xwayland(
 }
 
 fn launch_error(config: &LaunchConfig, transport: &str, error: std::io::Error) -> Error {
-    Error::new(format!(
+    Error::from(SeatError::Process(format!(
         "could not launch {} through {transport}: {error}",
         Path::new(config.program()).display()
-    ))
+    )))
 }
 
 fn kill_and_wait(child: &mut Child) {
@@ -530,5 +550,22 @@ mod tests {
             height: 128,
         };
         assert!(frame_has_visible_content(&visible));
+    }
+
+    #[test]
+    fn error_wraps_seat_error_and_exposes_source() {
+        let error = Error::from(SeatError::Capture("no frame yet".to_string()));
+        assert!(error.to_string().contains("no frame yet"));
+        let source = std::error::Error::source(&error).expect("wrapped seat error");
+        assert!(source.to_string().contains("no frame yet"));
+    }
+
+    #[test]
+    fn io_errors_keep_their_message_through_the_harness() {
+        let io = std::io::Error::other("boom");
+        let message = io.to_string();
+        let error = Error::from(io);
+        assert_eq!(error.to_string(), message);
+        assert!(std::error::Error::source(&error).is_some());
     }
 }
